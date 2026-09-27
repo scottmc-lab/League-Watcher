@@ -221,15 +221,24 @@ DATE_DIVIDER_RE = re.compile(
     r"^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\w*,\s*\d{1,2}\w{0,2}\s+\w+\s+\d{4}$", re.IGNORECASE
 )
 
+# Each match row is ONE cell containing the whole thing as freeform text, e.g.
+# "Glenburn Miners Welfare Fc Blue (2014) 6 2 Kilwinning Community FA Blues"
+# or, if postponed/abandoned: "Team A P-P Team B". Some divisions also append
+# extra detail text after the away team ("Half time score: ...", "Round: ...")
+# which DETAIL_SPLIT_RE trims off.
+MATCH_SCORE_RE = re.compile(r"^(.+?)\s+(\d{1,2})\s+(\d{1,2})\s+(.+)$")
+MATCH_STATUS_RE = re.compile(r"^(.+?)\s+(P-P|A-A)\s+(.+)$", re.IGNORECASE)
+DETAIL_SPLIT_RE = re.compile(r"Half time score:|Kick off time:|Round:", re.IGNORECASE)
+
 
 def fetch_all_matches(url):
-    """This feed has no header row at all - each division is one <table>
-    containing a mix of:
-      - a legend row ("P-P: Postponed...") - ignored
-      - one-cell "date divider" rows ("Sunday, 23rd August 2026") that apply
-        to every match row until the next divider
-      - match rows: 4 cells (Home, ScoreH, ScoreA, Away) if played,
-        or 3 cells (Home, "P-P"/"A-A", Away) if postponed/abandoned
+    """This feed has no header row and no per-column cells - every row is a
+    single <td> whose whole text is either:
+      - the legend ("P-P: Postponed...") - ignored
+      - a date divider ("Sunday, 23rd August 2026") applying to every match
+        row until the next divider
+      - a match: "Home Team <scoreH> <scoreA> Away Team", or
+        "Home Team P-P Away Team" if postponed/abandoned
     """
     soup = BeautifulSoup(fetch_html(url), "html.parser")
     matches = []
@@ -240,41 +249,44 @@ def fetch_all_matches(url):
         rows = table.find_all("tr")
         current_date = ""
         parsed_count = 0
-        cell_count_histogram = {}
-        cell_count_samples = {}
+        unrecognised_samples = []
 
         for tr in rows:
             cells = tr.find_all(["td", "th"])
             if not cells:
                 continue
-            texts = [c.get_text(strip=True) for c in cells]
 
-            n = len(texts)
-            cell_count_histogram[n] = cell_count_histogram.get(n, 0) + 1
-            if n not in cell_count_samples:
-                cell_count_samples[n] = []
-            if len(cell_count_samples[n]) < 2:
-                cell_count_samples[n].append(texts)
+            full_text = " ".join(c.get_text(" ", strip=True) for c in cells).strip()
+            full_text = re.sub(r"\s+", " ", full_text)
+            if not full_text:
+                continue
 
-            if len(texts) == 1:
-                text = texts[0]
-                if DATE_DIVIDER_RE.match(text):
-                    current_date = text
-                continue  # legend row, or a date divider we've just recorded
+            if full_text.startswith("P-P:"):
+                continue  # legend row
 
-            if len(texts) == 3:
-                home, status, away = texts
-                score_text, played = "", False
-            elif len(texts) == 4:
-                home, s1, s2, away = texts
-                if s1.strip().isdigit() and s2.strip().isdigit():
-                    score_text, played = f"{s1.strip()}-{s2.strip()}", True
-                else:
-                    score_text, played = "", False
+            if DATE_DIVIDER_RE.match(full_text):
+                current_date = full_text
+                continue
+
+            home = away = None
+            score_text, played = "", False
+
+            m = MATCH_SCORE_RE.match(full_text)
+            if m:
+                home_raw, s1, s2, away_raw = m.groups()
+                home = DETAIL_SPLIT_RE.split(home_raw)[0].strip()
+                away = DETAIL_SPLIT_RE.split(away_raw)[0].strip()
+                score_text, played = f"{s1}-{s2}", True
             else:
-                continue  # some other row shape (e.g. an expanded "half time/kick off" detail row) - skip
+                m2 = MATCH_STATUS_RE.match(full_text)
+                if m2:
+                    home_raw, _status, away_raw = m2.groups()
+                    home = DETAIL_SPLIT_RE.split(home_raw)[0].strip()
+                    away = DETAIL_SPLIT_RE.split(away_raw)[0].strip()
 
             if not home or not away:
+                if len(unrecognised_samples) < 2:
+                    unrecognised_samples.append(full_text)
                 continue
 
             date_parsed = None
@@ -298,11 +310,9 @@ def fetch_all_matches(url):
             })
             parsed_count += 1
 
-        print(f"  Table {table_num}: parsed {parsed_count} match row(s). Cell-count histogram: {cell_count_histogram}")
-        if parsed_count == 0 and table_num <= 2:
-            for n, samples in sorted(cell_count_samples.items()):
-                for s in samples:
-                    print(f"    {n} cell(s): {s}")
+        print(f"  Table {table_num}: parsed {parsed_count} match row(s).")
+        for s in unrecognised_samples:
+            print(f"    Unrecognised row text: {s!r}")
 
     if not matches:
         print("  WARNING: still parsed 0 matches - the structure may differ further than expected.")
