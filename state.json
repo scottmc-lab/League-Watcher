@@ -7,9 +7,94 @@
     "lost": "1",
     "points": "16",
     "pos": "1",
-    "gf": "0",
-    "ga": "0",
-    "gd": "0"
+    "gf": "40",
+    "ga": "20",
+    "gd": "20"
   },
-  "matches": []
+  "matches": [
+    {
+      "key": "Saturday, 22nd August 2026|Glenburn Miners Welfare Fc Blue (2014)|Kilwinning Community Football Academy (2014) Blues",
+      "date": "Saturday, 22nd August 2026",
+      "date_parsed": "2026-08-22T00:00:00",
+      "time": "",
+      "home": "Glenburn Miners Welfare Fc Blue (2014)",
+      "away": "Kilwinning Community Football Academy (2014) Blues",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "6-2"
+    },
+    {
+      "key": "Tuesday, 25th August 2026|Kilwinning Rangers Whites (2014)|Glenburn Miners Welfare Fc Blue (2014)",
+      "date": "Tuesday, 25th August 2026",
+      "date_parsed": "2026-08-25T00:00:00",
+      "time": "",
+      "home": "Kilwinning Rangers Whites (2014)",
+      "away": "Glenburn Miners Welfare Fc Blue (2014)",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "1-9"
+    },
+    {
+      "key": "Saturday, 29th August 2026|Glenburn Miners Welfare Fc Blue (2014)|Prestwick Football Club",
+      "date": "Saturday, 29th August 2026",
+      "date_parsed": "2026-08-29T00:00:00",
+      "time": "",
+      "home": "Glenburn Miners Welfare Fc Blue (2014)",
+      "away": "Prestwick Football Club",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "4-3"
+    },
+    {
+      "key": "Tuesday, 1st September 2026|Troon FC (2014)|Glenburn Miners Welfare Fc Blue (2014)",
+      "date": "Tuesday, 1st September 2026",
+      "date_parsed": "2026-09-01T00:00:00",
+      "time": "",
+      "home": "Troon FC (2014)",
+      "away": "Glenburn Miners Welfare Fc Blue (2014)",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "4-7"
+    },
+    {
+      "key": "Saturday, 5th September 2026|Glenburn Miners Welfare Fc Blue (2014)|AC Irvine (2014)",
+      "date": "Saturday, 5th September 2026",
+      "date_parsed": "2026-09-05T00:00:00",
+      "time": "",
+      "home": "Glenburn Miners Welfare Fc Blue (2014)",
+      "away": "AC Irvine (2014)",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "6-0"
+    },
+    {
+      "key": "Tuesday, 8th September 2026|Bonnyton Thistle Black 2014|Glenburn Miners Welfare Fc Blue (2014)",
+      "date": "Tuesday, 8th September 2026",
+      "date_parsed": "2026-09-08T00:00:00",
+      "time": "",
+      "home": "Bonnyton Thistle Black 2014",
+      "away": "Glenburn Miners Welfare Fc Blue (2014)",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "6-4"
+    },
+    {
+      "key": "Tuesday, 15th September 2026|Glenburn Miners Welfare Fc Blue (2014)|Cumnock Juniors Youth FC (2014)",
+      "date": "Tuesday, 15th September 2026",
+      "date_parsed": "2026-09-15T00:00:00",
+      "time": "",
+      "home": "Glenburn Miners Welfare Fc Blue (2014)",
+      "away": "Cumnock Juniors Youth FC (2014)",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "4-4"
+    }
+  ]
 }
