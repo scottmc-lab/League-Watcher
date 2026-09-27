@@ -5,7 +5,11 @@
     "won": "5",
     "drawn": "1",
     "lost": "1",
-    "points": "16"
+    "points": "16",
+    "pos": "1",
+    "gf": "0",
+    "ga": "0",
+    "gd": "0"
   },
   "matches": []
 }
