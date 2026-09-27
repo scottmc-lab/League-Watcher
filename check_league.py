@@ -110,8 +110,10 @@ def parse_league_table_element(table):
     if not rows:
         return []
 
-    header_cells = rows[0].find_all(["th", "td"])
+    header_idx = find_header_row_index(rows)
+    header_cells = rows[header_idx].find_all(["th", "td"])
     headers_norm = [normalise_header(c.get_text()) for c in header_cells]
+    data_rows = rows[header_idx + 1:]
 
     col_index = {}
     for canonical, aliases in LEAGUE_COLUMN_ALIASES.items():
@@ -127,7 +129,7 @@ def parse_league_table_element(table):
     )
 
     teams = []
-    for tr in rows[1:]:
+    for tr in data_rows:
         cells = tr.find_all(["td", "th"])
         if not cells or len(cells) <= team_col:
             continue
@@ -219,6 +221,17 @@ MATCH_COLUMN_ALIASES = {
 SCORE_RE = re.compile(r"(\d+)\s*[-:]\s*(\d+)")
 
 
+def find_header_row_index(rows, min_cols=3, max_rows_to_check=5):
+    """Some feeds put a one-cell caption/legend row before the real header
+    row. Scan the first few rows and use the first one that actually looks
+    like a multi-column header, rather than assuming row 0 always is."""
+    for idx, tr in enumerate(rows[:max_rows_to_check]):
+        cells = tr.find_all(["th", "td"])
+        if len(cells) >= min_cols:
+            return idx
+    return 0
+
+
 def fetch_all_matches(url):
     """Returns every match found in the feed (all teams), most recent info first
     order is whatever the page uses; we sort separately where it matters."""
@@ -231,8 +244,11 @@ def fetch_all_matches(url):
         rows = table.find_all("tr")
         if not rows:
             continue
-        header_cells = rows[0].find_all(["th", "td"])
+
+        header_idx = find_header_row_index(rows)
+        header_cells = rows[header_idx].find_all(["th", "td"])
         headers_norm = [normalise_header(c.get_text()) for c in header_cells]
+        data_rows = rows[header_idx + 1:]
 
         col_index = {}
         for canonical, aliases in MATCH_COLUMN_ALIASES.items():
@@ -245,13 +261,13 @@ def fetch_all_matches(url):
         has_fixture_col = "fixture" in col_index
         recognised = has_home_away or has_fixture_col
         print(
-            f"  Table {table_num}: {len(rows)-1} data row(s), headers={[c.get_text(strip=True) for c in header_cells]}, "
-            f"recognised={recognised}"
+            f"  Table {table_num}: header row index {header_idx}, {len(data_rows)} data row(s), "
+            f"headers={[c.get_text(strip=True) for c in header_cells]}, recognised={recognised}"
         )
         if not recognised:
             continue
 
-        for tr in rows[1:]:
+        for tr in data_rows:
             cells = tr.find_all(["td", "th"])
             if not cells:
                 continue
