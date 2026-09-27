@@ -104,18 +104,11 @@ LEAGUE_COLUMN_ALIASES = {
 }
 
 
-def fetch_league_table(url):
-    """Returns a list of dicts, one per team, in table order."""
-    soup = BeautifulSoup(fetch_html(url), "html.parser")
-    table = soup.find("table")
-    if table is None:
-        raise RuntimeError(
-            "No <table> found on the league table page. It may be rendered by "
-            "JavaScript - see README for how to find the real data source."
-        )
+def parse_league_table_element(table):
+    """Parse a single <table> element into a list of team dicts."""
     rows = table.find_all("tr")
     if not rows:
-        raise RuntimeError("League table has no rows.")
+        return []
 
     header_cells = rows[0].find_all(["th", "td"])
     headers_norm = [normalise_header(c.get_text()) for c in header_cells]
@@ -147,6 +140,31 @@ def fetch_league_table(url):
                 entry[canonical] = cells[idx].get_text(strip=True)
         teams.append(entry)
     return teams
+
+
+def fetch_league_table(url, team_name):
+    """The page may contain several tables (one per age group/division).
+    Find and return the one that actually contains our team."""
+    soup = BeautifulSoup(fetch_html(url), "html.parser")
+    all_tables = soup.find_all("table")
+    if not all_tables:
+        raise RuntimeError(
+            "No <table> found on the league table page. It may be rendered by "
+            "JavaScript - see README for how to find the real data source."
+        )
+
+    parsed_tables = [parse_league_table_element(t) for t in all_tables]
+    parsed_tables = [t for t in parsed_tables if t]  # drop empty ones
+
+    for teams in parsed_tables:
+        if find_team(teams, team_name) is not None:
+            return teams
+
+    all_teams_seen = [row["team"] for t in parsed_tables for row in t]
+    raise LookupError(
+        f"Team not found in any of the {len(parsed_tables)} table(s) on the page. "
+        f"Teams seen: {all_teams_seen}"
+    )
 
 
 def find_team(teams, team_name):
@@ -342,11 +360,27 @@ def glenburn_full_results(matches, team_name):
     return out
 
 
+def glenburn_full_fixtures(matches, team_name):
+    """Every upcoming (not yet played) fixture for our team, in date order."""
+    fixtures = [m for m in matches if not m["played"] and
+                (is_our_team(m["home"], team_name) or is_our_team(m["away"], team_name))]
+    fixtures.sort(key=sort_key)
+    out = []
+    for m in fixtures:
+        home = is_our_team(m["home"], team_name)
+        opponent = m["away"] if home else m["home"]
+        out.append({
+            "date": m["date"], "time": m["time"], "venue_ha": "H" if home else "A",
+            "opponent": opponent, "ground": m["venue"],
+        })
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Email building
 # ---------------------------------------------------------------------------
 
-def build_html_email(our_row, changes, teams, team_summaries, glenburn_results, is_first_run):
+def build_html_email(our_row, changes, teams, team_summaries, glenburn_results, glenburn_fixtures, is_first_run):
     if is_first_run:
         changes_html = "<p>First automated check for this team — here's today's snapshot. You'll see what's changed from the next check onward.</p>"
     elif changes:
@@ -399,6 +433,22 @@ def build_html_email(our_row, changes, teams, team_summaries, glenburn_results, 
     else:
         gb_html = "<p>No completed results found yet.</p>"
 
+    if glenburn_fixtures:
+        gbf_rows = "".join(
+            f"<tr><td>{esc(f['date'])} {esc(f['time'])}</td><td>{esc(f['venue_ha'])}</td>"
+            f"<td style='text-align:left;'>{esc(f['opponent'])}</td>"
+            f"<td style='text-align:left;'>{esc(f['ground'] or '—')}</td></tr>"
+            for f in glenburn_fixtures
+        )
+        gbf_html = (
+            "<table cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%;font-size:14px;text-align:center;'>"
+            "<tr style='background:#222;color:#fff;'><th>Date/Time</th><th>H/A</th>"
+            "<th style='text-align:left;'>Opponent</th><th style='text-align:left;'>Venue</th></tr>"
+            f"{gbf_rows}</table>"
+        )
+    else:
+        gbf_html = "<p>No upcoming fixtures found yet.</p>"
+
     pos, pts = our_row.get("pos", "?"), our_row.get("points", "?")
     return f"""<html><body style="font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
       <h2 style="margin-bottom:0;">{esc(TEAM_NAME)}</h2>
@@ -415,10 +465,13 @@ def build_html_email(our_row, changes, teams, team_summaries, glenburn_results, 
 
       <h3>{esc(TEAM_NAME)} — results in full</h3>
       {gb_html}
+
+      <h3>{esc(TEAM_NAME)} — upcoming fixtures</h3>
+      {gbf_html}
     </body></html>"""
 
 
-def build_text_email(our_row, changes, teams, team_summaries, glenburn_results, is_first_run):
+def build_text_email(our_row, changes, teams, team_summaries, glenburn_results, glenburn_fixtures, is_first_run):
     lines = [TEAM_NAME, f"Currently {ordinal(our_row.get('pos','?'))}, {our_row.get('points','?')} points.", ""]
 
     lines.append("WHAT'S CHANGED")
@@ -454,6 +507,15 @@ def build_text_email(our_row, changes, teams, team_summaries, glenburn_results, 
             lines.append(f"{r['date']:<12} {r['venue']}  vs {r['opponent']:<28} {r['score']:<6} {r['outcome']}")
     else:
         lines.append("No completed results found yet.")
+    lines.append("")
+
+    lines.append(f"{TEAM_NAME.upper()} - UPCOMING FIXTURES")
+    if glenburn_fixtures:
+        for f in glenburn_fixtures:
+            when = f"{f['date']} {f['time']}".strip()
+            lines.append(f"{when:<18} {f['venue_ha']}  vs {f['opponent']:<28} {f['ground'] or ''}")
+    else:
+        lines.append("No upcoming fixtures found yet.")
 
     return "\n".join(lines)
 
@@ -492,7 +554,7 @@ def main():
     state = load_state()
     is_first_run = state.get("league") is None
 
-    teams = fetch_league_table(LEAGUE_URL)
+    teams = fetch_league_table(LEAGUE_URL, TEAM_NAME)
     our_row = find_team(teams, TEAM_NAME)
     if our_row is None:
         raise LookupError(f"Team not found in league table. Teams seen: {[t['team'] for t in teams]}")
@@ -518,10 +580,11 @@ def main():
         })
 
     glenburn_results = glenburn_full_results(all_matches, TEAM_NAME)
+    glenburn_fixtures = glenburn_full_fixtures(all_matches, TEAM_NAME)
 
     subject = f"AYFL League update - {TEAM_NAME} - {datetime.now():%d %b %Y}"
-    html_body = build_html_email(our_row, changes, teams, team_summaries, glenburn_results, is_first_run)
-    text_body = build_text_email(our_row, changes, teams, team_summaries, glenburn_results, is_first_run)
+    html_body = build_html_email(our_row, changes, teams, team_summaries, glenburn_results, glenburn_fixtures, is_first_run)
+    text_body = build_text_email(our_row, changes, teams, team_summaries, glenburn_results, glenburn_fixtures, is_first_run)
 
     if EMAIL_TO and SMTP_USERNAME and SMTP_PASSWORD:
         send_email(subject, text_body, html_body)
