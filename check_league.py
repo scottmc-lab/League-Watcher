@@ -206,128 +206,82 @@ def diff_league_row(old, new):
 # Match feed (results + fixtures, for the whole league)
 # ---------------------------------------------------------------------------
 
-MATCH_COLUMN_ALIASES = {
-    "date": ["date"],
-    "time": ["time", "kickoff", "ko"],
-    "home": ["home", "hometeam", "home team"],
-    "away": ["away", "awayteam", "away team"],
-    "score": ["score", "result", "ft"],
-    "home_score": ["hs", "homescore", "home goals", "hg", "homegoals"],
-    "away_score": ["as", "awayscore", "away goals", "ag", "awaygoals"],
-    "fixture": ["fixture", "match"],
-    "venue": ["venue", "ground"],
-    "competition": ["competition", "league", "division"],
-}
-SCORE_RE = re.compile(r"(\d+)\s*[-:]\s*(\d+)")
-
-
-def find_header_row_index(rows, min_cols=3, max_rows_to_check=5):
-    """Some feeds put a one-cell caption/legend row before the real header
-    row. Scan the first few rows and use the first one that actually looks
-    like a multi-column header, rather than assuming row 0 always is."""
-    for idx, tr in enumerate(rows[:max_rows_to_check]):
-        cells = tr.find_all(["th", "td"])
-        if len(cells) >= min_cols:
-            return idx
-    return 0
+DATE_DIVIDER_RE = re.compile(
+    r"^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\w*,\s*\d{1,2}\w{0,2}\s+\w+\s+\d{4}$", re.IGNORECASE
+)
 
 
 def fetch_all_matches(url):
-    """Returns every match found in the feed (all teams), most recent info first
-    order is whatever the page uses; we sort separately where it matters."""
+    """This feed has no header row at all - each division is one <table>
+    containing a mix of:
+      - a legend row ("P-P: Postponed...") - ignored
+      - one-cell "date divider" rows ("Sunday, 23rd August 2026") that apply
+        to every match row until the next divider
+      - match rows: 4 cells (Home, ScoreH, ScoreA, Away) if played,
+        or 3 cells (Home, "P-P"/"A-A", Away) if postponed/abandoned
+    """
     soup = BeautifulSoup(fetch_html(url), "html.parser")
     matches = []
     all_tables = soup.find_all("table")
     print(f"Match feed page: found {len(all_tables)} <table> element(s).")
-    samples_printed = 0
 
     for table_num, table in enumerate(all_tables, start=1):
         rows = table.find_all("tr")
-        if not rows:
-            continue
+        current_date = ""
+        parsed_count = 0
 
-        header_idx = find_header_row_index(rows)
-        header_cells = rows[header_idx].find_all(["th", "td"])
-        headers_norm = [normalise_header(c.get_text()) for c in header_cells]
-        data_rows = rows[header_idx + 1:]
-
-        col_index = {}
-        for canonical, aliases in MATCH_COLUMN_ALIASES.items():
-            for i, h in enumerate(headers_norm):
-                if h in [normalise_header(a) for a in aliases]:
-                    col_index[canonical] = i
-                    break
-
-        has_home_away = "home" in col_index and "away" in col_index
-        has_fixture_col = "fixture" in col_index
-        recognised = has_home_away or has_fixture_col
-        print(
-            f"  Table {table_num}: header row index {header_idx}, {len(data_rows)} data row(s), "
-            f"headers={[c.get_text(strip=True) for c in header_cells]}, recognised={recognised}"
-        )
-        if not recognised:
-            if samples_printed < 2:
-                for sample_num, sample_tr in enumerate(data_rows[:2], start=1):
-                    sample_cells = sample_tr.find_all(["td", "th"])
-                    print(
-                        f"    Sample data row {sample_num} ({len(sample_cells)} cell(s)): "
-                        f"{[c.get_text(strip=True) for c in sample_cells]}"
-                    )
-                samples_printed += 1
-            continue
-
-        for tr in data_rows:
+        for tr in rows:
             cells = tr.find_all(["td", "th"])
             if not cells:
                 continue
+            texts = [c.get_text(strip=True) for c in cells]
 
-            def cell(key):
-                idx = col_index.get(key)
-                return cells[idx].get_text(strip=True) if idx is not None and idx < len(cells) else None
+            if len(texts) == 1:
+                text = texts[0]
+                if DATE_DIVIDER_RE.match(text):
+                    current_date = text
+                continue  # legend row, or a date divider we've just recorded
 
-            home, away = cell("home"), cell("away")
-            if not has_home_away:
-                fixture_text = cell("fixture") or ""
-                parts = re.split(r"\s+v\s+|\s+vs\s+", fixture_text, flags=re.IGNORECASE)
-                if len(parts) == 2:
-                    home, away = parts[0].strip(), parts[1].strip()
+            if len(texts) == 3:
+                home, status, away = texts
+                score_text, played = "", False
+            elif len(texts) == 4:
+                home, s1, s2, away = texts
+                if s1.strip().isdigit() and s2.strip().isdigit():
+                    score_text, played = f"{s1.strip()}-{s2.strip()}", True
+                else:
+                    score_text, played = "", False
+            else:
+                continue  # some other row shape (e.g. an expanded "half time/kick off" detail row) - skip
+
             if not home or not away:
                 continue
 
-            date_raw = cell("date") or ""
             date_parsed = None
-            if date_raw:
+            if current_date:
                 try:
-                    date_parsed = dateparser.parse(date_raw, dayfirst=True, fuzzy=True)
+                    date_parsed = dateparser.parse(current_date, fuzzy=True)
                 except (ValueError, OverflowError):
                     date_parsed = None
 
-            score_text = cell("score") or ""
-            if not score_text:
-                hs, as_ = cell("home_score"), cell("away_score")
-                if hs and as_ and hs.strip().isdigit() and as_.strip().isdigit():
-                    score_text = f"{hs.strip()}-{as_.strip()}"
-            score_match = SCORE_RE.search(score_text)
-
             matches.append({
-                "key": f"{date_raw}|{home}|{away}",
-                "date": date_raw,
+                "key": f"{current_date}|{home}|{away}",
+                "date": current_date,
                 "date_parsed": date_parsed.isoformat() if date_parsed else None,
-                "time": cell("time") or "",
+                "time": "",
                 "home": home,
                 "away": away,
-                "venue": cell("venue") or "",
-                "competition": cell("competition") or "",
-                "played": bool(score_match),
-                "score": f"{score_match.group(1)}-{score_match.group(2)}" if score_match else "",
+                "venue": "",
+                "competition": "",
+                "played": played,
+                "score": score_text,
             })
+            parsed_count += 1
+
+        print(f"  Table {table_num}: parsed {parsed_count} match row(s).")
 
     if not matches:
-        print(
-            "  WARNING: no matches were parsed from any table on this page. "
-            "This usually means the actual column headers don't match what this "
-            "script expects - see the 'headers=' lines above for what's really there."
-        )
+        print("  WARNING: still parsed 0 matches - the structure may differ further than expected.")
     return matches
 
 
