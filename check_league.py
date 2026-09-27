@@ -56,6 +56,17 @@ def normalise_header(text):
     return re.sub(r"[^a-z0-9+/#]", "", text.strip().lower())
 
 
+def find_header_row_index(rows, min_cols=3, max_rows_to_check=5):
+    """Some feeds put a one-cell caption/legend row before the real header
+    row. Scan the first few rows and use the first one that actually looks
+    like a multi-column header, rather than assuming row 0 always is."""
+    for idx, tr in enumerate(rows[:max_rows_to_check]):
+        cells = tr.find_all(["th", "td"])
+        if len(cells) >= min_cols:
+            return idx
+    return 0
+
+
 def fetch_html(url):
     resp = requests.get(url, headers=HTTP_HEADERS, timeout=30)
     resp.raise_for_status()
