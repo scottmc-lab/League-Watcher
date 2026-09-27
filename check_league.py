@@ -240,12 +240,21 @@ def fetch_all_matches(url):
         rows = table.find_all("tr")
         current_date = ""
         parsed_count = 0
+        cell_count_histogram = {}
+        cell_count_samples = {}
 
         for tr in rows:
             cells = tr.find_all(["td", "th"])
             if not cells:
                 continue
             texts = [c.get_text(strip=True) for c in cells]
+
+            n = len(texts)
+            cell_count_histogram[n] = cell_count_histogram.get(n, 0) + 1
+            if n not in cell_count_samples:
+                cell_count_samples[n] = []
+            if len(cell_count_samples[n]) < 2:
+                cell_count_samples[n].append(texts)
 
             if len(texts) == 1:
                 text = texts[0]
@@ -289,7 +298,11 @@ def fetch_all_matches(url):
             })
             parsed_count += 1
 
-        print(f"  Table {table_num}: parsed {parsed_count} match row(s).")
+        print(f"  Table {table_num}: parsed {parsed_count} match row(s). Cell-count histogram: {cell_count_histogram}")
+        if parsed_count == 0 and table_num <= 2:
+            for n, samples in sorted(cell_count_samples.items()):
+                for s in samples:
+                    print(f"    {n} cell(s): {s}")
 
     if not matches:
         print("  WARNING: still parsed 0 matches - the structure may differ further than expected.")
