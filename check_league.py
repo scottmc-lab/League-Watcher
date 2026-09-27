@@ -22,6 +22,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape as esc
 from pathlib import Path
+from base64 import b64encode
 
 import requests
 from bs4 import BeautifulSoup
@@ -41,6 +42,19 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_USERNAME)
 EMAIL_TO = os.environ.get("EMAIL_TO", "")
 
 STATE_FILE = Path(__file__).parent / "state.json"
+ASSETS_DIR = Path(__file__).parent / "assets"
+LEAGUE_BADGE_PATH = ASSETS_DIR / "ayfl_badge.png"
+CLUB_BADGE_PATH = ASSETS_DIR / "glenburn_badge.jpg"
+
+
+def image_data_uri(path, mime_type):
+    """Reads an image file and returns it as an embeddable data: URI, or None
+    if the file isn't there - so a missing badge never breaks the email."""
+    try:
+        data = path.read_bytes()
+        return f"data:{mime_type};base64,{b64encode(data).decode('ascii')}"
+    except (FileNotFoundError, OSError):
+        return None
 HTTP_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -510,9 +524,26 @@ def build_html_email(our_row, changes, teams, team_summaries, glenburn_results, 
         gbf_html = "<p>No upcoming fixtures found yet.</p>"
 
     pos, pts = our_row.get("pos", "?"), our_row.get("points", "?")
+
+    club_badge = image_data_uri(CLUB_BADGE_PATH, "image/jpeg")
+    league_badge = image_data_uri(LEAGUE_BADGE_PATH, "image/png")
+    club_img = f"<img src='{club_badge}' width='56' height='56' alt='Club badge' style='border-radius:50%;vertical-align:middle;'>" if club_badge else ""
+    league_img = f"<img src='{league_badge}' width='56' height='56' alt='League badge' style='border-radius:50%;vertical-align:middle;'>" if league_badge else ""
+    header_html = f"""
+      <table cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+        <tr>
+          <td style="padding-right:12px;">{club_img}</td>
+          <td>
+            <h2 style="margin:0;">{esc(TEAM_NAME)}</h2>
+            <p style="margin:2px 0 0 0;color:#555;">Currently {esc(ordinal(pos))}, {esc(pts)} points.</p>
+          </td>
+          <td style="padding-left:12px;text-align:right;">{league_img}</td>
+        </tr>
+      </table>
+    """
+
     return f"""<html><body style="font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.4;">
-      <h2 style="margin-bottom:0;">{esc(TEAM_NAME)}</h2>
-      <p style="margin-top:4px;color:#555;">Currently {esc(ordinal(pos))}, {esc(pts)} points.</p>
+      {header_html}
 
       <h3>What's changed</h3>
       {changes_html}
@@ -650,15 +681,24 @@ def main():
     glenburn_results = glenburn_full_results(all_matches, TEAM_NAME)
     glenburn_fixtures = glenburn_full_fixtures(all_matches, TEAM_NAME)
 
+    old_points = state.get("league", {}).get("points") if state.get("league") else None
+    new_points = our_row.get("points")
+    points_changed = (old_points is not None) and (old_points != new_points)
+
     subject = f"AYFL League update - {TEAM_NAME} - {datetime.now():%d %b %Y}"
     html_body = build_html_email(our_row, changes, teams, team_summaries, glenburn_results, glenburn_fixtures, is_first_run)
     text_body = build_text_email(our_row, changes, teams, team_summaries, glenburn_results, glenburn_fixtures, is_first_run)
 
-    if EMAIL_TO and SMTP_USERNAME and SMTP_PASSWORD:
+    if is_first_run:
+        print("First run - saving baseline, no email sent.")
+    elif not points_changed:
+        print(f"Points unchanged ({old_points} -> {new_points}) - no email sent.")
+    elif EMAIL_TO and SMTP_USERNAME and SMTP_PASSWORD:
+        print(f"Points changed ({old_points} -> {new_points}) - sending email.")
         send_email(subject, text_body, html_body)
         print("Email sent.")
     else:
-        print("Email settings not fully configured - printing digest instead:\n")
+        print("Points changed, but email settings not fully configured - printing digest instead:\n")
         print(text_body)
 
     save_state({"league": our_row, "matches": our_matches})
