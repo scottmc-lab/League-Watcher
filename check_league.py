@@ -239,6 +239,7 @@ def fetch_all_matches(url):
     matches = []
     all_tables = soup.find_all("table")
     print(f"Match feed page: found {len(all_tables)} <table> element(s).")
+    samples_printed = 0
 
     for table_num, table in enumerate(all_tables, start=1):
         rows = table.find_all("tr")
@@ -265,6 +266,14 @@ def fetch_all_matches(url):
             f"headers={[c.get_text(strip=True) for c in header_cells]}, recognised={recognised}"
         )
         if not recognised:
+            if samples_printed < 2:
+                for sample_num, sample_tr in enumerate(data_rows[:2], start=1):
+                    sample_cells = sample_tr.find_all(["td", "th"])
+                    print(
+                        f"    Sample data row {sample_num} ({len(sample_cells)} cell(s)): "
+                        f"{[c.get_text(strip=True) for c in sample_cells]}"
+                    )
+                samples_printed += 1
             continue
 
         for tr in data_rows:
