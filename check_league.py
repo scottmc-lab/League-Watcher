@@ -139,6 +139,13 @@ def parse_league_table_element(table):
             if idx < len(cells):
                 entry[canonical] = cells[idx].get_text(strip=True)
         teams.append(entry)
+
+    # Many league table feeds don't actually label a "Pos" column - the row
+    # order itself IS the ranking. Number teams by their row position rather
+    # than trusting a possibly-missing/blank "pos" column.
+    for i, entry in enumerate(teams, start=1):
+        entry["pos"] = str(i)
+
     return teams
 
 
@@ -203,6 +210,8 @@ MATCH_COLUMN_ALIASES = {
     "home": ["home", "hometeam", "home team"],
     "away": ["away", "awayteam", "away team"],
     "score": ["score", "result", "ft"],
+    "home_score": ["hs", "homescore", "home goals", "hg", "homegoals"],
+    "away_score": ["as", "awayscore", "away goals", "ag", "awaygoals"],
     "fixture": ["fixture", "match"],
     "venue": ["venue", "ground"],
     "competition": ["competition", "league", "division"],
@@ -215,8 +224,10 @@ def fetch_all_matches(url):
     order is whatever the page uses; we sort separately where it matters."""
     soup = BeautifulSoup(fetch_html(url), "html.parser")
     matches = []
+    all_tables = soup.find_all("table")
+    print(f"Match feed page: found {len(all_tables)} <table> element(s).")
 
-    for table in soup.find_all("table"):
+    for table_num, table in enumerate(all_tables, start=1):
         rows = table.find_all("tr")
         if not rows:
             continue
@@ -232,7 +243,12 @@ def fetch_all_matches(url):
 
         has_home_away = "home" in col_index and "away" in col_index
         has_fixture_col = "fixture" in col_index
-        if not has_home_away and not has_fixture_col:
+        recognised = has_home_away or has_fixture_col
+        print(
+            f"  Table {table_num}: {len(rows)-1} data row(s), headers={[c.get_text(strip=True) for c in header_cells]}, "
+            f"recognised={recognised}"
+        )
+        if not recognised:
             continue
 
         for tr in rows[1:]:
@@ -262,6 +278,10 @@ def fetch_all_matches(url):
                     date_parsed = None
 
             score_text = cell("score") or ""
+            if not score_text:
+                hs, as_ = cell("home_score"), cell("away_score")
+                if hs and as_ and hs.strip().isdigit() and as_.strip().isdigit():
+                    score_text = f"{hs.strip()}-{as_.strip()}"
             score_match = SCORE_RE.search(score_text)
 
             matches.append({
@@ -276,6 +296,13 @@ def fetch_all_matches(url):
                 "played": bool(score_match),
                 "score": f"{score_match.group(1)}-{score_match.group(2)}" if score_match else "",
             })
+
+    if not matches:
+        print(
+            "  WARNING: no matches were parsed from any table on this page. "
+            "This usually means the actual column headers don't match what this "
+            "script expects - see the 'headers=' lines above for what's really there."
+        )
     return matches
 
 
@@ -318,6 +345,26 @@ def group_by_team(matches, team_names):
     for name in groups:
         groups[name].sort(key=sort_key)
     return groups
+
+
+def compute_goal_stats(team_name, team_matches):
+    """Tally goals for/against/difference from completed matches, since some
+    league table pages don't include GF/GA/GD columns at all."""
+    gf = ga = 0
+    for m in team_matches:
+        if not m["played"] or not m["score"]:
+            continue
+        try:
+            h, a = (int(x) for x in m["score"].split("-"))
+        except ValueError:
+            continue
+        if names_match(m["home"], team_name):
+            gf += h
+            ga += a
+        else:
+            gf += a
+            ga += h
+    return gf, ga, gf - ga
 
 
 def team_summary(team_name, matches):
@@ -568,6 +615,14 @@ def main():
 
     team_names = [t["team"] for t in teams]
     groups = group_by_team(all_matches, team_names)
+
+    print(f"Match feed: found {len(all_matches)} total match(es) across all tables; "
+          f"{len(team_matches_for(all_matches, TEAM_NAME))} involve {TEAM_NAME}.")
+
+    for t in teams:
+        gf, ga, gd = compute_goal_stats(t["team"], groups.get(t["team"], []))
+        t["gf"], t["ga"], t["gd"] = str(gf), str(ga), str(gd)
+
     team_summaries = []
     for t in teams:
         last_result, next_fixture = team_summary(t["team"], groups.get(t["team"], []))
