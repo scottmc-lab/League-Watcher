@@ -1,15 +1,15 @@
 {
   "league": {
     "team": "Glenburn Miners Welfare Fc Blue (2014)",
-    "played": "7",
-    "won": "5",
+    "played": "8",
+    "won": "6",
     "drawn": "1",
     "lost": "1",
-    "points": "16",
+    "points": "19",
     "pos": "1",
-    "gf": "40",
-    "ga": "20",
-    "gd": "20"
+    "gf": "43",
+    "ga": "22",
+    "gd": "21"
   },
   "matches": [
     {
@@ -95,6 +95,18 @@
       "competition": "",
       "played": true,
       "score": "4-4"
+    },
+    {
+      "key": "Saturday, 26th September 2026|Glenburn Miners Welfare Fc Blue (2014)|Whitletts Victoria FC (2014)",
+      "date": "Saturday, 26th September 2026",
+      "date_parsed": "2026-09-26T00:00:00",
+      "time": "",
+      "home": "Glenburn Miners Welfare Fc Blue (2014)",
+      "away": "Whitletts Victoria FC (2014)",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "3-2"
     }
   ]
 }
