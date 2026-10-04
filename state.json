@@ -1,15 +1,15 @@
 {
   "league": {
     "team": "Glenburn Miners Welfare Fc Blue (2014)",
-    "played": "8",
-    "won": "6",
+    "played": "9",
+    "won": "7",
     "drawn": "1",
     "lost": "1",
-    "points": "19",
+    "points": "22",
     "pos": "1",
-    "gf": "43",
-    "ga": "22",
-    "gd": "21"
+    "gf": "48",
+    "ga": "26",
+    "gd": "22"
   },
   "matches": [
     {
@@ -107,6 +107,18 @@
       "competition": "",
       "played": true,
       "score": "3-2"
+    },
+    {
+      "key": "Saturday, 3rd October 2026|Glenburn Miners Welfare Fc Blue (2014)|Irvine Meadow Red 2014",
+      "date": "Saturday, 3rd October 2026",
+      "date_parsed": "2026-10-03T00:00:00",
+      "time": "",
+      "home": "Glenburn Miners Welfare Fc Blue (2014)",
+      "away": "Irvine Meadow Red 2014",
+      "venue": "",
+      "competition": "",
+      "played": true,
+      "score": "5-4"
     }
   ]
 }
