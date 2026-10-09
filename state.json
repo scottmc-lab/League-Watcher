@@ -119,18 +119,6 @@
       "competition": "",
       "played": true,
       "score": "5-4"
-    },
-    {
-      "key": "Saturday, 10th October 2026|Irvine Meadow Blue (2014)|Glenburn Miners Welfare Fc Blue (2014)",
-      "date": "Saturday, 10th October 2026",
-      "date_parsed": "2026-10-10T00:00:00",
-      "time": "",
-      "home": "Irvine Meadow Blue (2014)",
-      "away": "Glenburn Miners Welfare Fc Blue (2014)",
-      "venue": "",
-      "competition": "",
-      "played": false,
-      "score": ""
     }
   ]
 }
